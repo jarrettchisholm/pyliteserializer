@@ -138,7 +138,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 			if (t == ';'):
 				b['variable'] 	= parseVariableName( cache )
 			
-				bindings += b
+				bindings.append( b )
 				print b
 			
 				b 		= None
@@ -158,7 +158,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 				else:
 					b['table'] 	= t
 					
-					bindings += b
+					bindings.append( b )
 					print b
 				
 					b 		= None
@@ -176,7 +176,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 					else:
 						raise Exception("Invalid @serialize annotation in file: " + b['file'])
 					
-					bindings += b
+					bindings.append( b )
 					print b
 				
 					b 		= None
@@ -194,7 +194,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 					else:
 						raise Exception("Invalid @deserialize annotation in file: " + b['file'])
 					
-					bindings += b
+					bindings.append( b )
 					print b
 				
 					b 		= None
@@ -255,6 +255,53 @@ def printMethods( file, bindings ):
 		if (file['header']):
 			print file['header']
 		print ''
+		
+		# Get table name
+		print bindings
+		table = ''
+		for b in bindings:
+			if (b['type'] == 'table'):
+				table = b['table']
+				break
+		
+		# If we have both source and header, print into both
+		if (file['source'] and file['header']):
+			serializeDefinition 	= 'virtual void serialize(SQLite::Database& db);'
+			deserializeDefinition 	= 'virtual void deserialize(SQLite::Database& db);'
+			
+			serializeImpl 			= '''
+			void {name}::serialize(SQLite::Database& db)
+			{{
+				std::stringstream ss;
+				ss << "INSERT INTO {table} VALUES (";
+				ss << id_ << ", ";
+				ss << "'" << name_ << "', ";
+				ss << worldId_;
+				ss << ")";
+				db.exec( ss.str().c_str() );
+			}}
+			'''
+			serializeImpl = serializeImpl.format(name = file['name'], table = table)
+			print serializeImpl
+			
+			deserializeImpl 		= '''
+			void {name}::deserialize(SQLite::Database& db)
+			{{
+				SQLite::Statement query(db, "SELECT * FROM {table} WHERE id = ?");
+
+				query.bind(1, id_);
+
+				while (query.executeStep())
+				{{
+					id_					= query.getColumn(0);
+					const char* name 	= query.getColumn(1);
+					name_ 				= std::string( name );
+					worldId_ 			= query.getColumn(2);
+				}}
+			}}
+			'''
+			deserializeImpl = deserializeImpl.format(name = file['name'], table = table)
+			print deserializeImpl
 
 
 
