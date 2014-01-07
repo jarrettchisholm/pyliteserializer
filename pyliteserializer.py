@@ -3,6 +3,7 @@
 import fnmatch
 import os
 import nltk
+import re
 
 BASE_DIR		= '../dark_horizon/'
 SOURCE 			= 'src'
@@ -106,6 +107,24 @@ def parseVariableName(tokens):
 	#return v
 
 
+
+def parseVariableType(tokens):
+	print tokens
+	
+	t = ''
+	
+	for i in xrange(len(tokens)-2, -1, -1):
+		if (tokens[i] != 'const'):
+			t = tokens[i]
+			break
+	
+	# Strip out ':' characters if we found the token ':string' (which comes from std::string)
+	t = t.replace(':', '')
+	
+	return t
+
+
+
 def parseTokens(tokens, fileMetaData, fileType):
 	bindings 	= []
 	b 			= None
@@ -136,7 +155,8 @@ def parseTokens(tokens, fileMetaData, fileType):
 		
 		if (b):
 			if (t == ';'):
-				b['variable'] 	= parseVariableName( cache )
+				b['variable'] 		= parseVariableName( cache )
+				b['variableType'] 	= parseVariableType( cache )
 			
 				bindings.append( b )
 				print b
@@ -234,15 +254,29 @@ def parseFile(file):
 				tokens += nltk.word_tokenize(line)
 	
 	# Parse tokens
-	bindings += parseTokens( tokens, file, 'source' )
-	
-	
-	# Validate bindings
-	
+	bindings += parseTokens( tokens, file, 'source' )	
 	
 	return bindings
 
 
+
+def validateBindings( bindings ):
+	# Validate bindings
+	pass
+
+
+
+def injectCodeIntoFile(fileName, tag, replaceWith):
+	contents = ''
+	with open(fileName, 'r') as f:
+		contents = f.read()
+	
+	regex = '.*{tag} start(.|\s)*?{tag} end.*'.format(tag = tag)
+	contents = re.sub(re.compile(regex), replaceWith, contents)
+	
+	with open(fileName, 'w') as f:
+		f.write( contents )
+	
 
 def printMethods( file, bindings ):
 	if (len(bindings) == 0):
@@ -258,50 +292,96 @@ def printMethods( file, bindings ):
 		
 		# Get table name
 		print bindings
-		table = ''
+		table 	= ''
 		for b in bindings:
 			if (b['type'] == 'table'):
 				table = b['table']
-				break
 		
 		# If we have both source and header, print into both
 		if (file['source'] and file['header']):
-			serializeDefinition 	= 'virtual void serialize(SQLite::Database& db);'
-			deserializeDefinition 	= 'virtual void deserialize(SQLite::Database& db);'
+			serializeDefinition 	= '''			// @serialize start
+				virtual void serialize(SQLite::Database& db);
+				// @serialize end'''
+			deserializeDefinition 	= '''			// @deserialize start
+				virtual void deserialize(SQLite::Database& db);
+				// @deserialize end'''
 			
-			serializeImpl 			= '''
+			columns 	= []
+			data 		= []
+			
+			for b in bindings:
+				if (b['type'] == 'column'):
+					columns.append( b['column'] )
+					if (b['variableType'] == 'string' or b['variableType'] == 'char*'):
+						data.append( "\"'\" << " + b['variable'] + " << \"'\"" )
+					else:
+						data.append( b['variable'] )
+			
+			columns 	= ', '.join( columns )
+			data 		= ' << \", " << '.join( data )
+			
+			serializeImpl 			= '''			// @serialize start
 			void {name}::serialize(SQLite::Database& db)
 			{{
 				std::stringstream ss;
-				ss << "INSERT INTO {table} VALUES (";
-				ss << id_ << ", ";
-				ss << "'" << name_ << "', ";
-				ss << worldId_;
+				ss << "INSERT INTO {table} ({columns}) VALUES (";
+				ss << {data};
 				ss << ")";
 				db.exec( ss.str().c_str() );
 			}}
-			'''
-			serializeImpl = serializeImpl.format(name = file['name'], table = table)
+			// @serialize end'''
+			serializeImpl = serializeImpl.format(name = file['name'], table = table, columns = columns, data = data)
 			print serializeImpl
 			
-			deserializeImpl 		= '''
+			
+			columns 	= []
+			data 		= []
+			index 		= 0
+			for b in bindings:
+				if (b['type'] == 'column'):
+					columns.append( b['column'] )
+					if (b['variableType'] == 'string'):
+						text = '''
+							const char* value{index} = query.getColumn({index});
+							{variable} = std::string( value{index} );'''
+						text = text.format(variable = b['variable'], index = index)
+						data.append( text )
+					else:
+						text = '''
+							{variable} = query.getColumn({index});'''
+						text = text.format(variable = b['variable'], index = index)
+						data.append( text )
+					index = index + 1
+			
+			columns 	= ', '.join( columns )
+			data 		= "\n".join( data )
+			
+			deserializeImpl 		= '''			// @deserialize start
 			void {name}::deserialize(SQLite::Database& db)
 			{{
-				SQLite::Statement query(db, "SELECT * FROM {table} WHERE id = ?");
+				SQLite::Statement query(db, "SELECT {columns} FROM {table} WHERE id = ?");
 
 				query.bind(1, id_);
 
 				while (query.executeStep())
 				{{
-					id_					= query.getColumn(0);
-					const char* name 	= query.getColumn(1);
-					name_ 				= std::string( name );
-					worldId_ 			= query.getColumn(2);
+					{data}
 				}}
 			}}
-			'''
-			deserializeImpl = deserializeImpl.format(name = file['name'], table = table)
+			// @deserialize end'''
+			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, data = data)
+			deserializeImpl
 			print deserializeImpl
+			
+			
+			# Insert into file(s)
+			injectCodeIntoFile(file['header'], '@serialize', serializeDefinition)
+			injectCodeIntoFile(file['header'], '@deserialize', deserializeDefinition)
+			injectCodeIntoFile(file['source'], '@serialize', serializeImpl)
+			injectCodeIntoFile(file['source'], '@deserialize', deserializeImpl)
+			injectCodeIntoFile(file['header'], '@serialize', serializeDefinition)
+			injectCodeIntoFile(file['header'], '@serialize', serializeDefinition)				
+					
 
 
 
@@ -310,5 +390,8 @@ matchFiles()
 
 for val in files:
 	bindings = parseFile( files[val] )
+	
+	validateBindings( bindings )
+	
 	printMethods( files[val], bindings )
 	
