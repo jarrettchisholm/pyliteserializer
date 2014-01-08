@@ -15,6 +15,8 @@ public:
 	
 	virtual void serialize(SQLite::Database& db) = 0;
 	virtual void deserialize(SQLite::Database& db) = 0;
+	
+	virtual void deserialize(SQLite::Database& db, const std::string& where) = 0;
 };
 
 }

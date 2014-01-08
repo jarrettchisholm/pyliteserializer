@@ -317,6 +317,12 @@ def printMethods( file, bindings ):
 					else:
 						data.append( b['variable'] )
 			
+			updateData = []
+			for i in range(0, len(columns)):
+				t = columns[i] + '=" << ' + data[i]
+				updateData.append(t)
+				
+			updateData	= ' << ", '.join( updateData )
 			columns 	= ', '.join( columns )
 			data 		= ' << \", " << '.join( data )
 			
@@ -324,13 +330,33 @@ def printMethods( file, bindings ):
 			void {name}::serialize(SQLite::Database& db)
 			{{
 				std::stringstream ss;
-				ss << "INSERT INTO {table} ({columns}) VALUES (";
-				ss << {data};
-				ss << ")";
-				db.exec( ss.str().c_str() );
+				if (id_ > 0)
+				{{
+					ss << "UPDATE {table} SET {updateData};
+				}}
+				else
+				{{
+					ss << "INSERT INTO {table} ({columns}) VALUES (";
+					ss << {data};
+					ss << ")";
+				}}
+				if (id_ > 0)
+				{{
+					ss << " WHERE id = " << id_;
+				}}
+				
+				try
+				{{
+					db.exec( ss.str().c_str() );
+				}}
+				catch (std::exception& e)
+				{{
+					std::cout << "SQLite Exception: " << e.what() << std::endl;
+					std::cout << "Query: " << ss.str() << std::endl;
+				}}
 			}}
 			// @serialize end'''
-			serializeImpl = serializeImpl.format(name = file['name'], table = table, columns = columns, data = data)
+			serializeImpl = serializeImpl.format(name = file['name'], table = table, columns = columns, data = data, updateData = updateData)
 			print serializeImpl
 			
 			
