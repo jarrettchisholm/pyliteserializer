@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "SqliteDataStore.h"
 
 namespace pyliteserializer
@@ -54,7 +56,7 @@ void SqliteDataStore::save(std::vector<ISqliteSerializable>& objects)
 {
 	for ( auto& obj : objects )
 	{
-		obj.serialize( *(db_.get()), where );
+		obj.serialize( *(db_.get()) );
 	}
 }
 
