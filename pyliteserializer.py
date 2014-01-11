@@ -132,8 +132,6 @@ def parseTokens(tokens, fileMetaData, fileType):
 	bindings 			= []
 	b 					= None
 	cache 				= []
-	# Used for parsing namespace metadata tag
-	classKeywordFound 	= False
 	
 	for i, t in enumerate(tokens):
 		if (t == '@'):
@@ -203,14 +201,9 @@ def parseTokens(tokens, fileMetaData, fileType):
 				b['id'] 	= True
 				
 			elif tokens[i+1] == 'namespace':
-				if (classKeywordFound):
-					raise Exception("Cannot place namespace tag after class keyword.")
 				if (not b):
 					b 			= {}
 				b['namespace'] 	= ''
-				
-		elif (t == 'class'):
-			classKeywordFound 	= True
 		
 		if (b):
 			if (t == ';'):
@@ -223,10 +216,18 @@ def parseTokens(tokens, fileMetaData, fileType):
 				b 		= None
 				cache 	= []
 			
-			elif (b.get('namespace') is not None and classKeywordFound is False):
+			elif (b.get('namespace') is not None):
 				if (t == '@' or t == 'namespace'):
 					# Eat
 					pass
+				elif (t == '{'):
+					pass
+				elif (t == '}'):
+					bindings.append( b )
+					#print b
+				
+					b 		= None
+					cache 	= []
 				else:
 					b['namespace'] += t
 			
