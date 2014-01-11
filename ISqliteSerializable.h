@@ -22,8 +22,15 @@ public:
 	virtual void deserialize(SQLite::Database& db, SqliteDataStore& ds, const std::string& where) = 0;
 	virtual void deserialize(SQLite::Statement& query, SqliteDataStore& ds) = 0;
 	
-	virtual void load(SqliteDataStore& ds) = 0;
-	virtual void save(SqliteDataStore& ds) = 0;
+	virtual void load(SqliteDataStore& ds)
+	{
+	}
+	;
+	
+	virtual void save(SqliteDataStore& ds)
+	{
+	}
+	;
 };
 
 }

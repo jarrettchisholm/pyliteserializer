@@ -630,19 +630,19 @@ private:
 	implementation = '''	
 void SqliteDataStore::load(ISqliteSerializable& object)
 {
-	object.deserialize( *(db_.get()) );
+	object.deserialize( *(db_.get()), *this );
 }
 
 void SqliteDataStore::load(ISqliteSerializable& object, const std::string& where)
 {
-	object.deserialize( *(db_.get()), where );
+	object.deserialize( *(db_.get()), *this, where );
 }
 
 void SqliteDataStore::load(std::vector<ISqliteSerializable>& objects)
 {
 	for ( auto& obj : objects )
 	{
-		obj.deserialize( *(db_.get()) );
+		obj.deserialize( *(db_.get()), *this );
 	}
 }
 
@@ -650,20 +650,20 @@ void SqliteDataStore::load(std::vector<ISqliteSerializable>& objects, const std:
 {
 	for ( auto& obj : objects )
 	{
-		obj.deserialize( *(db_.get()), where );
+		obj.deserialize( *(db_.get()), *this, where );
 	}
 }
 
 void SqliteDataStore::save(ISqliteSerializable& object)
 {
-	object.serialize( *(db_.get()) );
+	object.serialize( *(db_.get()), *this );
 }
 
 void SqliteDataStore::save(std::vector<ISqliteSerializable>& objects)
 {
 	for ( auto& obj : objects )
 	{
-		obj.serialize( *(db_.get()) );
+		obj.serialize( *(db_.get()), *this );
 	}
 }
 '''
@@ -698,19 +698,19 @@ void SqliteDataStore::save(std::vector<ISqliteSerializable>& objects)
 // {className} class					
 void SqliteDataStore::load({namespace}{className}& object)
 {{
-	object.deserialize( *(db_.get()) );
+	object.deserialize( *(db_.get()), *this );
 }}
 
 void SqliteDataStore::load({namespace}{className}& object, const std::string& where)
 {{
-	object.deserialize( *(db_.get()), where );
+	object.deserialize( *(db_.get()), *this, where );
 }}
 
 void SqliteDataStore::load(std::vector<{namespace}{className}>& objects)
 {{
 	for ( auto& obj : objects )
 	{{
-		obj.deserialize( *(db_.get()) );
+		obj.deserialize( *(db_.get()), *this );
 	}}
 }}
 
@@ -718,7 +718,7 @@ void SqliteDataStore::load(std::vector<{namespace}{className}>& objects, const s
 {{
 	for ( auto& obj : objects )
 	{{
-		obj.deserialize( *(db_.get()), where );
+		obj.deserialize( *(db_.get()), *this, where );
 	}}
 }}
 
@@ -747,7 +747,7 @@ void SqliteDataStore::loadBulk(std::vector<{namespace}{className}>& objects, con
 	else
 		ss << "SELECT {columns} FROM {table}";	
 	
-	SQLite::Statement query(*(db_.get()),  ss.str().c_str());
+	SQLite::Statement query(*(db_.get()), *this,  ss.str().c_str());
 
 	int index = 0;
     while (query.executeStep())
@@ -759,14 +759,14 @@ void SqliteDataStore::loadBulk(std::vector<{namespace}{className}>& objects, con
 
 void SqliteDataStore::save({namespace}{className}& object)
 {{
-	object.serialize( *(db_.get()) );
+	object.serialize( *(db_.get()), *this );
 }}
 
 void SqliteDataStore::save(std::vector<{namespace}{className}>& objects)
 {{
 	for ( auto& obj : objects )
 	{{
-		obj.serialize( *(db_.get()) );
+		obj.serialize( *(db_.get()), *this );
 	}}
 }}
 			'''
