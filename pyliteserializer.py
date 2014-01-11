@@ -217,10 +217,8 @@ def parseTokens(tokens, fileMetaData, fileType):
 				cache 	= []
 			
 			elif (b.get('namespace') is not None):
-				if (t == '@' or t == 'namespace'):
+				if (t == '@' or t == 'namespace' or t == '{'):
 					# Eat
-					pass
-				elif (t == '{'):
 					pass
 				elif (t == '}'):
 					bindings.append( b )
