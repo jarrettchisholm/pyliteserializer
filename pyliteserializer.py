@@ -112,7 +112,7 @@ def parseVariableName(tokens):
 
 
 def parseVariableType(tokens):
-	print tokens
+	#print tokens
 	
 	t = ''
 	
@@ -142,7 +142,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 			if tokens[i+1] == 'table':
 				if (b):
 					bindings.append( b )
-					print b
+					#print b
 					b 		= {}
 					cache 	= []
 				else:
@@ -153,7 +153,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 			elif tokens[i+1] == 'column':
 				if (b):
 					bindings.append( b )
-					print b
+					#print b
 					b 		= {}
 					cache 	= []
 				else:
@@ -164,7 +164,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 			elif tokens[i+1] == 'include':
 				if (b):
 					bindings.append( b )
-					print b
+					#print b
 					b 		= {}
 					cache 	= []
 				else:
@@ -182,6 +182,12 @@ def parseTokens(tokens, fileMetaData, fileType):
 				if (not b):
 					b 		= {}
 				b['type'] 	= 'deserialize'
+				b['file']	= fileMetaData[fileType]
+			
+			elif tokens[i+1] == 'deserialize_where':
+				if (not b):
+					b 		= {}
+				b['type'] 	= 'deserialize_where'
 				b['file']	= fileMetaData[fileType]
 			
 			elif tokens[i+1] == 'deserialize_from_query':
@@ -212,7 +218,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 				b['variableType'] 	= parseVariableType( cache )
 			
 				bindings.append( b )
-				print b
+				#print b
 			
 				b 		= None
 				cache 	= []
@@ -258,7 +264,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 						raise Exception("Invalid @serialize annotation in file: " + b['file'])
 					
 					bindings.append( b )
-					print b
+					#print b
 				
 					b 		= None
 					cache 	= []
@@ -276,7 +282,25 @@ def parseTokens(tokens, fileMetaData, fileType):
 						raise Exception("Invalid @deserialize annotation in file: " + b['file'])
 					
 					bindings.append( b )
-					print b
+					#print b
+				
+					b 		= None
+					cache 	= []
+			
+			elif (b['type'] == 'deserialize_where' and not b.get('start') and not b.get('end')):
+				if (t == '@' or t == 'deserialize_where'):
+					# Eat
+					pass
+				else:
+					if (t == 'start'):
+						b['start'] 	= True
+					elif (t == 'end'):
+						b['end'] 	= True
+					else:
+						raise Exception("Invalid @deserialize_where annotation in file: " + b['file'])
+					
+					bindings.append( b )
+					#print b
 				
 					b 		= None
 					cache 	= []
@@ -294,7 +318,7 @@ def parseTokens(tokens, fileMetaData, fileType):
 						raise Exception("Invalid @deserialize_from_query annotation in file: " + b['file'])
 					
 					bindings.append( b )
-					print b
+					#print b
 				
 					b 		= None
 					cache 	= []
@@ -439,19 +463,22 @@ def printMethods( file, bindings ):
 		# If we have both source and header, print into both
 		if (file['source'] and file['header']):
 			serializeDefinition 				= '''	// @serialize start
-	virtual void serialize(SQLite::Database& db);
+	virtual void serialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds);
 	// @serialize end'''
 			deserializeDefinition 				= '''	// @deserialize start
-	virtual void deserialize(SQLite::Database& db);
+	virtual void deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds);
 	// @deserialize end'''
+			deserializeWhereDefinition 			= '''	// @deserialize_where start
+	virtual void deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds, const std::string& where);
+	// @deserialize_where end'''
 			deserializeFromQueryDefinition 		= '''	// @deserialize_from_query start
-	virtual void deserialize(SQLite::Statement& query);
+	virtual void deserialize(SQLite::Statement& query, pyliteserializer::SqliteDataStore& ds);
 	// @deserialize_from_query end'''
 
 
 			
 			serializeImpl 			= '''// @serialize start
-void {name}::serialize(SQLite::Database& db)
+void {name}::serialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds)
 {{
 	std::stringstream ss;
 	if (id_ > 0)
@@ -478,6 +505,8 @@ void {name}::serialize(SQLite::Database& db)
 		std::cout << "SQLite Exception: " << e.what() << std::endl;
 		std::cout << "Query: " << ss.str() << std::endl;
 	}}
+	
+	save(ds);
 }}
 // @serialize end'''
 			serializeImpl = serializeImpl.format(name = file['name'], table = table, columns = columns, insertData = insertData, updateData = updateData)
@@ -485,10 +514,40 @@ void {name}::serialize(SQLite::Database& db)
 			
 			
 			
+			deserializeWhereImpl 		= '''// @deserialize_where start
+void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds, const std::string& where)
+{{
+	std::stringstream ss;
+	
+	if (where.length() > 0)
+		ss << "SELECT {columns} FROM {table} WHERE " << where;
+	else
+		ss << "SELECT {columns} FROM {table} WHERE id = ?";
+
+	SQLite::Statement query(db,  ss.str().c_str());
+
+	query.bind(1, id_);
+
+	while (query.executeStep())
+	{{
+		{queryData}
+	}}
+	
+	load(ds);
+}}
+// @deserialize_where end'''
+			deserializeWhereImpl = deserializeWhereImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData)
+			deserializeWhereImpl
+			#print deserializeWhereImpl
+			
+			
+			
 			deserializeFromQueryImpl 		= '''// @deserialize_from_query start
-void {name}::deserialize(SQLite::Statement& query)
+void {name}::deserialize(SQLite::Statement& query, pyliteserializer::SqliteDataStore& ds)
 {{
 	{queryData}
+	
+	load(ds);
 }}
 // @deserialize_from_query end'''
 			deserializeFromQueryImpl = deserializeFromQueryImpl.format(name = file['name'], queryData = queryData)
@@ -498,7 +557,7 @@ void {name}::deserialize(SQLite::Statement& query)
 			
 			
 			deserializeImpl 		= '''// @deserialize start
-void {name}::deserialize(SQLite::Database& db)
+void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds)
 {{
 	SQLite::Statement query(db, "SELECT {columns} FROM {table} WHERE id = ?");
 
@@ -508,6 +567,8 @@ void {name}::deserialize(SQLite::Database& db)
 	{{
 		{queryData}
 	}}
+	
+	load(ds);
 }}
 // @deserialize end'''
 			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData)
@@ -521,6 +582,9 @@ void {name}::deserialize(SQLite::Database& db)
 			
 			injectCodeIntoFile(file['header'], '@deserialize', deserializeDefinition)
 			injectCodeIntoFile(file['source'], '@deserialize', deserializeImpl)
+			
+			injectCodeIntoFile(file['header'], '@deserialize_where', deserializeWhereDefinition)
+			injectCodeIntoFile(file['source'], '@deserialize_where', deserializeWhereImpl)
 			
 			injectCodeIntoFile(file['header'], '@deserialize_from_query', deserializeFromQueryDefinition)
 			injectCodeIntoFile(file['source'], '@deserialize_from_query', deserializeFromQueryImpl)
@@ -747,12 +811,12 @@ void SqliteDataStore::loadBulk(std::vector<{namespace}{className}>& objects, con
 	else
 		ss << "SELECT {columns} FROM {table}";	
 	
-	SQLite::Statement query(*(db_.get()), *this,  ss.str().c_str());
+	SQLite::Statement query(*(db_.get()), ss.str().c_str());
 
 	int index = 0;
     while (query.executeStep())
     {{
-		objects[index].deserialize( query );
+		objects[index].deserialize( query, *this );
 		index++;
     }}
 }}
@@ -803,6 +867,7 @@ SqliteDataStore::~SqliteDataStore()
 	'''
 	
 	
+	print 'Writing SqliteDataStore class'
 	
 	# Print class
 	with open(DATASTORE_DIR + DATASTORE_NAME + '.h', 'w') as f:
