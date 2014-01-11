@@ -6,6 +6,9 @@
 namespace pyliteserializer
 {
 
+// Forward declaration
+class SqliteDataStore;
+
 class ISqliteSerializable {
 public:
 	virtual ~ISqliteSerializable()
@@ -13,10 +16,14 @@ public:
 	}
 	;
 	
-	virtual void serialize(SQLite::Database& db) = 0;
-	virtual void deserialize(SQLite::Database& db) = 0;
+	virtual void serialize(SQLite::Database& db, SqliteDataStore& ds) = 0;
+	virtual void deserialize(SQLite::Database& db, SqliteDataStore& ds) = 0;
 	
-	virtual void deserialize(SQLite::Database& db, const std::string& where) = 0;
+	virtual void deserialize(SQLite::Database& db, SqliteDataStore& ds, const std::string& where) = 0;
+	virtual void deserialize(SQLite::Statement& query, SqliteDataStore& ds) = 0;
+	
+	virtual void load(SqliteDataStore& ds) = 0;
+	virtual void save(SqliteDataStore& ds) = 0;
 };
 
 }

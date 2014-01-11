@@ -183,6 +183,12 @@ def parseTokens(tokens, fileMetaData, fileType):
 					b 		= {}
 				b['type'] 	= 'deserialize'
 				b['file']	= fileMetaData[fileType]
+			
+			elif tokens[i+1] == 'deserialize_from_query':
+				if (not b):
+					b 		= {}
+				b['type'] 	= 'deserialize_from_query'
+				b['file']	= fileMetaData[fileType]
 				
 			### Metadata tags
 			elif tokens[i+1] == 'id':
@@ -274,6 +280,24 @@ def parseTokens(tokens, fileMetaData, fileType):
 				
 					b 		= None
 					cache 	= []
+			
+			elif (b['type'] == 'deserialize_from_query' and not b.get('start') and not b.get('end')):
+				if (t == '@' or t == 'deserialize_from_query'):
+					# Eat
+					pass
+				else:
+					if (t == 'start'):
+						b['start'] 	= True
+					elif (t == 'end'):
+						b['end'] 	= True
+					else:
+						raise Exception("Invalid @deserialize_from_query annotation in file: " + b['file'])
+					
+					bindings.append( b )
+					print b
+				
+					b 		= None
+					cache 	= []
 				
 			else:
 				# Add to cache, which we use to get the variable name
@@ -315,6 +339,63 @@ def parseFile(file):
 
 
 
+def getQueryString( bindings, variableName ):
+	""" Columns a bunch of data about the bindings.  Will return properly formatted strings for
+		updating, inserting, and querying the SQLite table specified in the bindings dictionary.  Will also
+		return the table name and a string that lists the columns (properly formatted for use in an SQLite
+		query).
+		variableName is the name to use for the SQLiteC++ Statement variable in the generated methods.
+	"""
+	table 		= ''
+	columns 	= []
+	queryData 	= []
+	insertData 	= []
+	updateData 	= []
+	index 		= 0
+	
+	for b in bindings:
+		# Process table
+		if (b['type'] == 'table'):
+			table = b['table']
+			
+		# Process column
+		elif (b['type'] == 'column'):
+			columns.append( b['column'] )
+			
+			# Process query data
+			if (b['variableType'] == 'string'):
+				text = '''
+const char* value{index} = {query}.getColumn({index});
+{variable} = std::string( value{index} );'''
+				text = text.format(variable = b['variable'], index = index, query = variableName)
+				queryData.append( text )
+			else:
+				text = '''
+{variable} = {query}.getColumn({index});'''
+				text = text.format(variable = b['variable'], index = index, query = variableName)
+				queryData.append( text )
+			index = index + 1
+			
+			# Process insert data
+			if (b['variableType'] == 'string' or b['variableType'] == 'char*'):
+				insertData.append( "\"'\" << " + b['variable'] + " << \"'\"" )
+			else:
+				insertData.append( b['variable'] )
+	
+	# Process update data
+	for i in range(0, len(columns)):
+		t = columns[i] + '=" << ' + insertData[i]
+		updateData.append(t)
+		
+	columns 	= ', '.join( columns )
+	updateData	= ' << ", '.join( updateData )
+	insertData 	= ' << \", " << '.join( insertData )
+	queryData	= '\n'.join( queryData )
+	
+	return {'table': table, 'updateData':  updateData, 'columns':  columns, 'insertData':  insertData, 'queryData':  queryData}
+
+
+
 def validateBindings( bindings ):
 	# Validate bindings
 	pass
@@ -345,123 +426,105 @@ def printMethods( file, bindings ):
 			print file['header']
 		print ''
 		
-		# Get table name
-		print bindings
-		table 	= ''
-		for b in bindings:
-			if (b['type'] == 'table'):
-				table = b['table']
+		#print bindings
+		
+		# Get query, column and table data		
+		data = getQueryString( bindings, 'query' )
+		table 		= data['table']
+		updateData 	= data['updateData']
+		insertData 	= data['insertData']
+		queryData 	= data['queryData']
+		columns 	= data['columns']
 		
 		# If we have both source and header, print into both
 		if (file['source'] and file['header']):
-			serializeDefinition 	= '''			// @serialize start
-				virtual void serialize(SQLite::Database& db);
-				// @serialize end'''
-			deserializeDefinition 	= '''			// @deserialize start
-				virtual void deserialize(SQLite::Database& db);
-				// @deserialize end'''
-			
-			columns 	= []
-			data 		= []
-			
-			for b in bindings:
-				if (b['type'] == 'column'):
-					columns.append( b['column'] )
-					if (b['variableType'] == 'string' or b['variableType'] == 'char*'):
-						data.append( "\"'\" << " + b['variable'] + " << \"'\"" )
-					else:
-						data.append( b['variable'] )
-			
-			updateData = []
-			for i in range(0, len(columns)):
-				t = columns[i] + '=" << ' + data[i]
-				updateData.append(t)
-				
-			updateData	= ' << ", '.join( updateData )
-			columns 	= ', '.join( columns )
-			data 		= ' << \", " << '.join( data )
-			
-			serializeImpl 			= '''			// @serialize start
-			void {name}::serialize(SQLite::Database& db)
-			{{
-				std::stringstream ss;
-				if (id_ > 0)
-				{{
-					ss << "UPDATE {table} SET {updateData};
-				}}
-				else
-				{{
-					ss << "INSERT INTO {table} ({columns}) VALUES (";
-					ss << {data};
-					ss << ")";
-				}}
-				if (id_ > 0)
-				{{
-					ss << " WHERE id = " << id_;
-				}}
-				
-				try
-				{{
-					db.exec( ss.str().c_str() );
-				}}
-				catch (std::exception& e)
-				{{
-					std::cout << "SQLite Exception: " << e.what() << std::endl;
-					std::cout << "Query: " << ss.str() << std::endl;
-				}}
-			}}
-			// @serialize end'''
-			serializeImpl = serializeImpl.format(name = file['name'], table = table, columns = columns, data = data, updateData = updateData)
-			print serializeImpl
-			
-			
-			columns 	= []
-			data 		= []
-			index 		= 0
-			for b in bindings:
-				if (b['type'] == 'column'):
-					columns.append( b['column'] )
-					if (b['variableType'] == 'string'):
-						text = '''
-							const char* value{index} = query.getColumn({index});
-							{variable} = std::string( value{index} );'''
-						text = text.format(variable = b['variable'], index = index)
-						data.append( text )
-					else:
-						text = '''
-							{variable} = query.getColumn({index});'''
-						text = text.format(variable = b['variable'], index = index)
-						data.append( text )
-					index = index + 1
-			
-			columns 	= ', '.join( columns )
-			data 		= "\n".join( data )
-			
-			deserializeImpl 		= '''			// @deserialize start
-			void {name}::deserialize(SQLite::Database& db)
-			{{
-				SQLite::Statement query(db, "SELECT {columns} FROM {table} WHERE id = ?");
+			serializeDefinition 				= '''	// @serialize start
+	virtual void serialize(SQLite::Database& db);
+	// @serialize end'''
+			deserializeDefinition 				= '''	// @deserialize start
+	virtual void deserialize(SQLite::Database& db);
+	// @deserialize end'''
+			deserializeFromQueryDefinition 		= '''	// @deserialize_from_query start
+	virtual void deserialize(SQLite::Statement& query);
+	// @deserialize_from_query end'''
 
-				query.bind(1, id_);
 
-				while (query.executeStep())
-				{{
-					{data}
-				}}
-			}}
-			// @deserialize end'''
-			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, data = data)
+			
+			serializeImpl 			= '''// @serialize start
+void {name}::serialize(SQLite::Database& db)
+{{
+	std::stringstream ss;
+	if (id_ > 0)
+	{{
+		ss << "UPDATE {table} SET {updateData};
+	}}
+	else
+	{{
+		ss << "INSERT INTO {table} ({columns}) VALUES (";
+		ss << {insertData};
+		ss << ")";
+	}}
+	if (id_ > 0)
+	{{
+		ss << " WHERE id = " << id_;
+	}}
+	
+	try
+	{{
+		db.exec( ss.str().c_str() );
+	}}
+	catch (std::exception& e)
+	{{
+		std::cout << "SQLite Exception: " << e.what() << std::endl;
+		std::cout << "Query: " << ss.str() << std::endl;
+	}}
+}}
+// @serialize end'''
+			serializeImpl = serializeImpl.format(name = file['name'], table = table, columns = columns, insertData = insertData, updateData = updateData)
+			#print serializeImpl
+			
+			
+			
+			deserializeFromQueryImpl 		= '''// @deserialize_from_query start
+void {name}::deserialize(SQLite::Statement& query)
+{{
+	{queryData}
+}}
+// @deserialize_from_query end'''
+			deserializeFromQueryImpl = deserializeFromQueryImpl.format(name = file['name'], queryData = queryData)
+			deserializeFromQueryImpl
+			#print deserializeFromQueryImpl
+			
+			
+			
+			deserializeImpl 		= '''// @deserialize start
+void {name}::deserialize(SQLite::Database& db)
+{{
+	SQLite::Statement query(db, "SELECT {columns} FROM {table} WHERE id = ?");
+
+	query.bind(1, id_);
+
+	while (query.executeStep())
+	{{
+		{queryData}
+	}}
+}}
+// @deserialize end'''
+			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData)
 			deserializeImpl
-			print deserializeImpl
+			#print deserializeImpl
 			
 			
 			# Insert into file(s)
 			injectCodeIntoFile(file['header'], '@serialize', serializeDefinition)
-			injectCodeIntoFile(file['header'], '@deserialize', deserializeDefinition)
 			injectCodeIntoFile(file['source'], '@serialize', serializeImpl)
+			
+			injectCodeIntoFile(file['header'], '@deserialize', deserializeDefinition)
 			injectCodeIntoFile(file['source'], '@deserialize', deserializeImpl)
-			injectCodeIntoFile(file['header'], '@serialize', serializeDefinition)
-			injectCodeIntoFile(file['header'], '@serialize', serializeDefinition)				
+			
+			injectCodeIntoFile(file['header'], '@deserialize_from_query', deserializeFromQueryDefinition)
+			injectCodeIntoFile(file['source'], '@deserialize_from_query', deserializeFromQueryImpl)
+			
 					
 
 
@@ -470,6 +533,22 @@ def printSqliteDataStore( classBindings ):
 	headerContents 	= ''
 	classContents 	= ''
 	includeList 	= []
+	
+	# Default header classes
+	definition = '''
+	// Default methods
+	void load(ISqliteSerializable& object);
+	void load(ISqliteSerializable& object, const std::string& where);
+	void load(std::vector<ISqliteSerializable>& objects);
+	void load(std::vector<ISqliteSerializable>& objects, const std::string& where);
+	
+	void save(ISqliteSerializable& object);
+	void save(std::vector<ISqliteSerializable>& objects);
+'''
+	
+	headerContents += definition
+
+	
 	
 	# Generate header string
 	for b in classBindings:
@@ -493,10 +572,12 @@ def printSqliteDataStore( classBindings ):
 				includeList.append( includeFile )
 			
 			definition = '''
+	// {className} class
 	void load({namespace}{className}& object);
 	void load({namespace}{className}& object, const std::string& where);
 	void load(std::vector<{namespace}{className}>& objects);
 	void load(std::vector<{namespace}{className}>& objects, const std::string& where);
+	void loadBulk(std::vector<{namespace}{className}>& objects, const std::string& where);
 	
 	void save({namespace}{className}& object);
 	void save(std::vector<{namespace}{className}>& objects);
@@ -545,6 +626,49 @@ private:
 	'''
 	
 	
+	# Default class methods
+	implementation = '''	
+void SqliteDataStore::load(ISqliteSerializable& object)
+{
+	object.deserialize( *(db_.get()) );
+}
+
+void SqliteDataStore::load(ISqliteSerializable& object, const std::string& where)
+{
+	object.deserialize( *(db_.get()), where );
+}
+
+void SqliteDataStore::load(std::vector<ISqliteSerializable>& objects)
+{
+	for ( auto& obj : objects )
+	{
+		obj.deserialize( *(db_.get()) );
+	}
+}
+
+void SqliteDataStore::load(std::vector<ISqliteSerializable>& objects, const std::string& where)
+{
+	for ( auto& obj : objects )
+	{
+		obj.deserialize( *(db_.get()), where );
+	}
+}
+
+void SqliteDataStore::save(ISqliteSerializable& object)
+{
+	object.serialize( *(db_.get()) );
+}
+
+void SqliteDataStore::save(std::vector<ISqliteSerializable>& objects)
+{
+	for ( auto& obj : objects )
+	{
+		obj.serialize( *(db_.get()) );
+	}
+}
+'''
+
+	classContents += implementation
 	
 	# Generate class string
 	for b in classBindings:
@@ -562,7 +686,16 @@ private:
 				break
 		
 		if (include):
-			implementation = '''					
+			# Get query, column and table data		
+			data = getQueryString( b['bindings'], 'query' )
+			table 		= data['table']
+			updateData 	= data['updateData']
+			insertData 	= data['insertData']
+			queryData 	= data['queryData']
+			columns 	= data['columns']
+			
+			implementation = '''
+// {className} class					
 void SqliteDataStore::load({namespace}{className}& object)
 {{
 	object.deserialize( *(db_.get()) );
@@ -589,6 +722,41 @@ void SqliteDataStore::load(std::vector<{namespace}{className}>& objects, const s
 	}}
 }}
 
+void SqliteDataStore::loadBulk(std::vector<{namespace}{className}>& objects, const std::string& where)
+{{
+	std::stringstream ss;
+	
+	// Get number of rows that will be returned
+	if (where.length() > 0)
+		ss << "SELECT COUNT(*) FROM {table} WHERE " << where;
+	else
+		ss << "SELECT COUNT(*) FROM {table}";
+	
+	int numRows = db_->execAndGet( ss.str().c_str() ).getInt();
+	
+	objects.resize( numRows );
+	
+	
+	
+	ss.str(std::string());
+	ss.clear();
+
+	// Do actual query here
+	if (where.length() > 0)
+		ss << "SELECT {columns} FROM {table} WHERE " << where;
+	else
+		ss << "SELECT {columns} FROM {table}";	
+	
+	SQLite::Statement query(*(db_.get()),  ss.str().c_str());
+
+	int index = 0;
+    while (query.executeStep())
+    {{
+		objects[index].deserialize( query );
+		index++;
+    }}
+}}
+
 void SqliteDataStore::save({namespace}{className}& object)
 {{
 	object.serialize( *(db_.get()) );
@@ -602,7 +770,7 @@ void SqliteDataStore::save(std::vector<{namespace}{className}>& objects)
 	}}
 }}
 			'''
-			implementation = implementation.format(className = name, namespace = namespace)
+			implementation = implementation.format(className = name, namespace = namespace, table = table, columns = columns)
 			
 			classContents += implementation
 	
