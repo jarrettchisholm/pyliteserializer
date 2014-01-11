@@ -6,10 +6,13 @@ import nltk
 import re
 
 BASE_DIR		= '../dark_horizon/'
+DATASTORE_DIR 	= BASE_DIR + 'src/game/data_store/'
 SOURCE 			= 'src'
 SOURCE_EXT		= 'cpp'
 HEADERS 		= 'src'
 HEADERS_EXT		= 'h'
+
+DATASTORE_NAME 	= 'SqliteDataStore'
 
 sourceMatches 	= []
 headerMatches 	= []
@@ -126,32 +129,76 @@ def parseVariableType(tokens):
 
 
 def parseTokens(tokens, fileMetaData, fileType):
-	bindings 	= []
-	b 			= None
-	cache 		= []
+	bindings 			= []
+	b 					= None
+	cache 				= []
+	# Used for parsing namespace metadata tag
+	classKeywordFound 	= False
 	
 	for i, t in enumerate(tokens):
 		if (t == '@'):
+			
+			### Primary tags
 			if tokens[i+1] == 'table':
-				b 			= {}
+				if (b):
+					bindings.append( b )
+					print b
+					b 		= {}
+					cache 	= []
+				else:
+					b 		= {}
 				b['type'] 	= 'table'
 				b['file']	= fileMetaData[fileType]
-			elif tokens[i+1] == 'id':
-				b 			= {}
-				b['type'] 	= 'id'
-				b['file']	= fileMetaData[fileType]
+				
 			elif tokens[i+1] == 'column':
-				b 			= {}
+				if (b):
+					bindings.append( b )
+					print b
+					b 		= {}
+					cache 	= []
+				else:
+					b 		= {}
 				b['type'] 	= 'column'
 				b['file']	= fileMetaData[fileType]
+			
+			elif tokens[i+1] == 'include':
+				if (b):
+					bindings.append( b )
+					print b
+					b 		= {}
+					cache 	= []
+				else:
+					b 		= {}
+				b['type'] 	= 'include'
+				b['file']	= fileMetaData[fileType]
+				
 			elif tokens[i+1] == 'serialize':
-				b 			= {}
+				if (not b):
+					b 		= {}
 				b['type'] 	= 'serialize'
 				b['file']	= fileMetaData[fileType]
+				
 			elif tokens[i+1] == 'deserialize':
-				b 			= {}
+				if (not b):
+					b 		= {}
 				b['type'] 	= 'deserialize'
 				b['file']	= fileMetaData[fileType]
+				
+			### Metadata tags
+			elif tokens[i+1] == 'id':
+				if (not b):
+					b 		= {}
+				b['id'] 	= True
+				
+			elif tokens[i+1] == 'namespace':
+				if (classKeywordFound):
+					raise Exception("Cannot place namespace tag after class keyword.")
+				if (not b):
+					b 			= {}
+				b['namespace'] 	= ''
+				
+		elif (t == 'class'):
+			classKeywordFound 	= True
 		
 		if (b):
 			if (t == ';'):
@@ -163,7 +210,14 @@ def parseTokens(tokens, fileMetaData, fileType):
 			
 				b 		= None
 				cache 	= []
-				
+			
+			elif (b.get('namespace') is not None and classKeywordFound is False):
+				if (t == '@' or t == 'namespace'):
+					# Eat
+					pass
+				else:
+					b['namespace'] += t
+			
 			elif (b['type'] == 'column' and not b.get('column')):
 				if (t == '@' or t == 'column'):
 					# Eat
@@ -177,12 +231,13 @@ def parseTokens(tokens, fileMetaData, fileType):
 					pass
 				else:
 					b['table'] 	= t
-					
-					bindings.append( b )
-					print b
-				
-					b 		= None
-					cache 	= []
+			
+			elif (b['type'] == 'include' and not b.get('include')):
+				if (t == '@' or t == 'include'):
+					# Eat
+					pass
+				else:
+					b['include'] = t
 					
 			elif (b['type'] == 'serialize' and not b.get('start') and not b.get('end')):
 				if (t == '@' or t == 'serialize'):
@@ -411,8 +466,188 @@ def printMethods( file, bindings ):
 
 
 
+def printSqliteDataStore( classBindings ):
+	headerContents 	= ''
+	classContents 	= ''
+	includeList 	= []
+	
+	# Generate header string
+	for b in classBindings:
+		name 		= b['name']
+		include 	= False
+		includeFile = None
+		namespace 	= ''
+		
+		# Find the namespace (if it was specified)
+		for binding in b['bindings']:
+			if (binding['type'] == 'table'):
+				# Only include this class if a table was defined for it
+				include = True
+				if (binding.get('namespace')):
+					namespace = binding['namespace'] + '::'
+			if (binding['type'] == 'include'):
+				includeFile = binding['include']
+
+		if (include):
+			if (includeFile):
+				includeList.append( includeFile )
+			
+			definition = '''
+	void load({namespace}{className}& object);
+	void load({namespace}{className}& object, const std::string& where);
+	void load(std::vector<{namespace}{className}>& objects);
+	void load(std::vector<{namespace}{className}>& objects, const std::string& where);
+	
+	void save({namespace}{className}& object);
+	void save(std::vector<{namespace}{className}>& objects);
+'''
+			definition = definition.format(className = name, namespace = namespace)
+			
+			headerContents += definition
+	
+	headerStart = '''#ifndef DATASTORE_H_
+#define DATASTORE_H_
+
+#include <string>
+#include <memory>
+#include <vector>
+
+#include "ISqliteSerializable.h"
+
+'''
+	
+	# Insert custom includes for classes here
+	for i in includeList:
+		headerStart += '#include "' + i + '"\n'
+	
+	headerStart += '''
+namespace pyliteserializer
+{
+
+class SqliteDataStore
+{
+public:
+	SqliteDataStore(const std::string& file);
+	virtual ~SqliteDataStore();
+	'''
+	
+	headerContents = headerStart + headerContents
+	
+	headerContents += '''
+	
+private:
+	std::unique_ptr<SQLite::Database> db_;
+};
+
+}
+
+#endif /* DATASTORE_H_ */
+	'''
+	
+	
+	
+	# Generate class string
+	for b in classBindings:
+		name 		= b['name']
+		include 	= False
+		namespace 	= ''
+		
+		# Find the namespace (if it was specified)
+		for binding in b['bindings']:
+			if (binding['type'] == 'table'):
+				# Only include this class if a table was defined for it
+				include = True
+				if (binding.get('namespace')):
+					namespace = binding['namespace'] + '::'
+				break
+		
+		if (include):
+			implementation = '''					
+void SqliteDataStore::load({namespace}{className}& object)
+{{
+	object.deserialize( *(db_.get()) );
+}}
+
+void SqliteDataStore::load({namespace}{className}& object, const std::string& where)
+{{
+	object.deserialize( *(db_.get()), where );
+}}
+
+void SqliteDataStore::load(std::vector<{namespace}{className}>& objects)
+{{
+	for ( auto& obj : objects )
+	{{
+		obj.deserialize( *(db_.get()) );
+	}}
+}}
+
+void SqliteDataStore::load(std::vector<{namespace}{className}>& objects, const std::string& where)
+{{
+	for ( auto& obj : objects )
+	{{
+		obj.deserialize( *(db_.get()), where );
+	}}
+}}
+
+void SqliteDataStore::save({namespace}{className}& object)
+{{
+	object.serialize( *(db_.get()) );
+}}
+
+void SqliteDataStore::save(std::vector<{namespace}{className}>& objects)
+{{
+	for ( auto& obj : objects )
+	{{
+		obj.serialize( *(db_.get()) );
+	}}
+}}
+			'''
+			implementation = implementation.format(className = name, namespace = namespace)
+			
+			classContents += implementation
+	
+	classContents = '''#include <iostream>
+
+#include "SqliteDataStore.h"
+
+namespace pyliteserializer
+{
+
+SqliteDataStore::SqliteDataStore(const std::string& file)
+{
+	try
+	{
+		db_ = std::unique_ptr<SQLite::Database>( new SQLite::Database(file.c_str(), SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) );
+	}
+	catch (std::exception& e)
+	{
+		std::cout << "exception: " << e.what();
+	}
+}
+
+SqliteDataStore::~SqliteDataStore()
+{
+}
+	''' + classContents
+	
+	classContents += '''
+}
+	'''
+	
+	
+	
+	# Print class
+	with open(DATASTORE_DIR + DATASTORE_NAME + '.h', 'w') as f:
+		f.write( headerContents )
+	with open(DATASTORE_DIR + DATASTORE_NAME + '.cpp', 'w') as f:
+		f.write( classContents )
+
+
+
 findFiles()
 matchFiles()
+
+dataStoreBindings = []
 
 for val in files:
 	bindings = parseFile( files[val] )
@@ -420,4 +655,13 @@ for val in files:
 	validateBindings( bindings )
 	
 	printMethods( files[val], bindings )
+	
+	data = {}
+	data['name'] 		= val
+	data['file'] 		= file
+	data['bindings'] 	= bindings
+	
+	dataStoreBindings.append( data )
+
+printSqliteDataStore( dataStoreBindings )
 	
