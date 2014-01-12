@@ -389,7 +389,7 @@ def getQueryString( bindings, variableName ):
 			
 			# Process query data
 			if (b['variableType'] == 'string'):
-				text = '{variable} = std::string( {query}.getColumn({index}) );'
+				text = '{variable} = std::string( {query}.getColumn({index}).getText() );'
 				text = text.format(variable = b['variable'], index = index, query = variableName)
 				queryData.append( text )
 			else:
