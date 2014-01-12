@@ -374,6 +374,8 @@ def getQueryString( bindings, variableName ):
 	queryData 	= []
 	insertData 	= []
 	updateData 	= []
+	whereClaus 	= []
+	bindData 	= []
 	index 		= 0
 	
 	for b in bindings:
@@ -405,6 +407,13 @@ const char* value{index} = {query}.getColumn({index});
 			else:
 				insertData.append( b['variable'] )
 	
+			# Process id
+			if (b.get('id')):
+				whereClaus.append( b['column'] + ' = ?' )
+				text = 'query.bind({index}, {variableName});'
+				text = text.format(index = len(whereClaus), variableName = b['variable'])
+				bindData.append( text )
+	
 	# Process update data
 	for i in range(0, len(columns)):
 		t = columns[i] + '=" << ' + insertData[i]
@@ -413,9 +422,19 @@ const char* value{index} = {query}.getColumn({index});
 	columns 	= ', '.join( columns )
 	updateData	= ' << ", '.join( updateData )
 	insertData 	= ' << \", " << '.join( insertData )
-	queryData	= '\n'.join( queryData )
+	queryData	= '\n\t'.join( queryData )
+	whereClaus 	= ' AND '.join( whereClaus )
+	bindData 	= '\n\t'.join( bindData )
 	
-	return {'table': table, 'updateData':  updateData, 'columns':  columns, 'insertData':  insertData, 'queryData':  queryData}
+	return {
+			'table': 		table, 
+			'updateData':  	updateData, 
+			'columns':  	columns, 
+			'insertData':  	insertData, 
+			'queryData':  	queryData,
+			'whereClaus': 	whereClaus,
+			'bindData': 	bindData
+			}
 
 
 
@@ -457,6 +476,8 @@ def printMethods( file, bindings ):
 		updateData 	= data['updateData']
 		insertData 	= data['insertData']
 		queryData 	= data['queryData']
+		whereClaus 	= data['whereClaus']
+		bindData 	= data['bindData']
 		columns 	= data['columns']
 		
 		# If we have both source and header, print into both
@@ -521,11 +542,11 @@ void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore
 	if (where.length() > 0)
 		ss << "SELECT {columns} FROM {table} WHERE " << where;
 	else
-		ss << "SELECT {columns} FROM {table} WHERE id = ?";
+		ss << "SELECT {columns} FROM {table} WHERE {where}";
 
 	SQLite::Statement query(db,  ss.str().c_str());
 
-	query.bind(1, id_);
+	{bindData}
 
 	while (query.executeStep())
 	{{
@@ -535,7 +556,7 @@ void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore
 	load(ds);
 }}
 // @deserialize_where end'''
-			deserializeWhereImpl = deserializeWhereImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData)
+			deserializeWhereImpl = deserializeWhereImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData, where = whereClaus, bindData = bindData)
 			deserializeWhereImpl
 			#print deserializeWhereImpl
 			
@@ -558,9 +579,9 @@ void {name}::deserialize(SQLite::Statement& query, pyliteserializer::SqliteDataS
 			deserializeImpl 		= '''// @deserialize start
 void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds)
 {{
-	SQLite::Statement query(db, "SELECT {columns} FROM {table} WHERE id = ?");
+	SQLite::Statement query(db, "SELECT {columns} FROM {table} WHERE {where}");
 
-	query.bind(1, id_);
+	{bindData}
 
 	while (query.executeStep())
 	{{
@@ -570,7 +591,7 @@ void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore
 	load(ds);
 }}
 // @deserialize end'''
-			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData)
+			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData, where = whereClaus, bindData = bindData)
 			deserializeImpl
 			#print deserializeImpl
 			
