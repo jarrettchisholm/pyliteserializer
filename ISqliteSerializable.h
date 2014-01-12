@@ -1,6 +1,10 @@
 #ifndef ISQLITESERIALIZABLE_H_
 #define ISQLITESERIALIZABLE_H_
 
+// Required C++ libraries
+#include <sstream>
+#include <iostream>
+
 #include "sqlitec++/SQLiteC++.h"
 
 namespace pyliteserializer
