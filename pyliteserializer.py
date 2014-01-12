@@ -389,14 +389,11 @@ def getQueryString( bindings, variableName ):
 			
 			# Process query data
 			if (b['variableType'] == 'string'):
-				text = '''
-const char* value{index} = {query}.getColumn({index});
-{variable} = std::string( value{index} );'''
+				text = '{variable} = std::string( {query}.getColumn({index}) );'
 				text = text.format(variable = b['variable'], index = index, query = variableName)
 				queryData.append( text )
 			else:
-				text = '''
-{variable} = {query}.getColumn({index});'''
+				text = '{variable} = {query}.getColumn({index});'
 				text = text.format(variable = b['variable'], index = index, query = variableName)
 				queryData.append( text )
 			index = index + 1
@@ -422,7 +419,7 @@ const char* value{index} = {query}.getColumn({index});
 	columns 	= ', '.join( columns )
 	updateData	= ' << ", '.join( updateData )
 	insertData 	= ' << \", " << '.join( insertData )
-	queryData	= '\n\t'.join( queryData )
+	queryData	= '\n'.join( queryData )
 	whereClaus 	= ' AND '.join( whereClaus )
 	bindData 	= '\n\t'.join( bindData )
 	
@@ -556,7 +553,7 @@ void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore
 	load(ds);
 }}
 // @deserialize_where end'''
-			deserializeWhereImpl = deserializeWhereImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData, where = whereClaus, bindData = bindData)
+			deserializeWhereImpl = deserializeWhereImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData.replace('\n', '\n\t\t'), where = whereClaus, bindData = bindData)
 			deserializeWhereImpl
 			#print deserializeWhereImpl
 			
@@ -570,7 +567,7 @@ void {name}::deserialize(SQLite::Statement& query, pyliteserializer::SqliteDataS
 	load(ds);
 }}
 // @deserialize_from_query end'''
-			deserializeFromQueryImpl = deserializeFromQueryImpl.format(name = file['name'], queryData = queryData)
+			deserializeFromQueryImpl = deserializeFromQueryImpl.format(name = file['name'], queryData = queryData.replace('\n', '\n\t'))
 			deserializeFromQueryImpl
 			#print deserializeFromQueryImpl
 			
@@ -591,7 +588,7 @@ void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore
 	load(ds);
 }}
 // @deserialize end'''
-			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData, where = whereClaus, bindData = bindData)
+			deserializeImpl = deserializeImpl.format(name = file['name'], table = table, columns = columns, queryData = queryData.replace('\n', '\n\t\t'), where = whereClaus, bindData = bindData)
 			deserializeImpl
 			#print deserializeImpl
 			
