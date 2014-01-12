@@ -534,14 +534,14 @@ void {name}::serialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& 
 			deserializeWhereImpl 		= '''// @deserialize_where start
 void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore& ds, const std::string& where)
 {{
-	std::stringstream ss;
+	std::string sql = std::string();
 	
 	if (where.length() > 0)
-		ss << "SELECT {columns} FROM {table} WHERE " << where;
+		sql = std::string( "SELECT {columns} FROM {table} WHERE " + where );
 	else
-		ss << "SELECT {columns} FROM {table} WHERE {where}";
+		sql = std::string( "SELECT {columns} FROM {table} WHERE {where}" );
 
-	SQLite::Statement query(db,  ss.str().c_str());
+	SQLite::Statement query(db,  sql.c_str());
 
 	{bindData}
 
@@ -805,30 +805,27 @@ void SqliteDataStore::load(std::vector<{namespace}{className}>& objects, const s
 
 void SqliteDataStore::loadBulk(std::vector<{namespace}{className}>& objects, const std::string& where)
 {{
-	std::stringstream ss;
+	std::string sql = std::string();
 	
 	// Get number of rows that will be returned
 	if (where.length() > 0)
-		ss << "SELECT COUNT(*) FROM {table} WHERE " << where;
+		sql = std::string( "SELECT COUNT(*) FROM {table} WHERE " + where );
 	else
-		ss << "SELECT COUNT(*) FROM {table}";
+		sql = std::string( "SELECT COUNT(*) FROM {table}" );
 	
-	int numRows = db_->execAndGet( ss.str().c_str() ).getInt();
+	int numRows = db_->execAndGet( sql.c_str() ).getInt();
 	
 	objects.resize( numRows );
 	
 	
-	
-	ss.str(std::string());
-	ss.clear();
 
 	// Do actual query here
 	if (where.length() > 0)
-		ss << "SELECT {columns} FROM {table} WHERE " << where;
+		sql = std::string( "SELECT {columns} FROM {table} WHERE " + where );
 	else
-		ss << "SELECT {columns} FROM {table}";	
+		sql = std::string( "SELECT {columns} FROM {table}" );	
 	
-	SQLite::Statement query(*(db_.get()), ss.str().c_str());
+	SQLite::Statement query(*(db_.get()), sql.c_str());
 
 	int index = 0;
     while (query.executeStep())
