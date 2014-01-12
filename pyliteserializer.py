@@ -20,6 +20,8 @@ files 			= {}
 
 
 def findFiles():
+	""" Finds all of the header and source files.  It does a recursive search through all directories it finds.
+	"""
 	for root, dirnames, filenames in os.walk( BASE_DIR + SOURCE ):
 		for filename in fnmatch.filter(filenames, '*.' + SOURCE_EXT):
 			sourceMatches.append( os.path.join(root, filename) )
@@ -30,6 +32,9 @@ def findFiles():
 
 
 def matchFiles():
+	""" It will match source (.cpp) files to their corresponding header (.h) files.  It will also parse and store the
+		class name (which must be the same as the file name).
+	"""
 	# Match source files
 	for val in sourceMatches:
 		f = {}
@@ -100,6 +105,8 @@ def matchFiles():
 
 
 def parseVariableName(tokens):
+	""" Parse and return the variable name from the provided tokens.
+	"""
 	return tokens[-1]
 	#v = ''
 	#
@@ -112,6 +119,8 @@ def parseVariableName(tokens):
 
 
 def parseVariableType(tokens):
+	""" Parse and return the variable type (i.e. string, int, etc) from the provided tokens.
+	"""
 	#print tokens
 	
 	t = ''
@@ -129,6 +138,9 @@ def parseVariableType(tokens):
 
 
 def parseTokens(tokens, fileMetaData, fileType):
+	""" Will parse all the tokens from a file, and store any tag data - or any other pertinent information about the file - in the bindings
+		dictionary.  Returns the bindings dictionary.
+	"""
 	bindings 			= []
 	b 					= None
 	cache 				= []
@@ -330,6 +342,9 @@ def parseTokens(tokens, fileMetaData, fileType):
 
 
 def parseFile(file):
+	""" Parse the header and source files for the class, and return the bindings dictionary, which contains tag data (and other pertinent 
+		information about the file)
+	"""
 	#print file
 	
 	bindings 	= []
@@ -436,12 +451,17 @@ def getQueryString( bindings, variableName ):
 
 
 def validateBindings( bindings ):
+	""" Validates the data in the bindings dictionary.
+	"""
+	# TODO: implement
 	# Validate bindings
 	pass
 
 
 
 def injectCodeIntoFile(fileName, tag, replaceWith):
+	""" Injects code snippets into the specified file.  The code snippet goes between a pair of tags, where the tag name is 'tag'.
+	"""
 	contents = ''
 	with open(fileName, 'r') as f:
 		contents = f.read()
@@ -454,6 +474,9 @@ def injectCodeIntoFile(fileName, tag, replaceWith):
 	
 
 def printMethods( file, bindings ):
+	""" Generates the header and source file code required for the given file with the given bindings.  It will then inject
+		the code into the header/source files.
+	"""
 	if (len(bindings) == 0):
 		# print 'No bindings present for file: ' + file['name']
 		pass
@@ -611,6 +634,8 @@ void {name}::deserialize(SQLite::Database& db, pyliteserializer::SqliteDataStore
 
 
 def printSqliteDataStore( classBindings ):
+	""" Prints the SqliteDataStore header/source files for the given class bindings.
+	"""
 	headerContents 	= ''
 	classContents 	= ''
 	includeList 	= []
@@ -891,6 +916,7 @@ SqliteDataStore::~SqliteDataStore()
 
 
 
+### Actually run through the files and generate the code
 findFiles()
 matchFiles()
 

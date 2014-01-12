@@ -1,7 +1,7 @@
 #ifndef ISQLITESERIALIZABLE_H_
 #define ISQLITESERIALIZABLE_H_
 
-// Required C++ libraries
+// Required C++ libraries for the generated code
 #include <sstream>
 #include <iostream>
 
