@@ -353,7 +353,7 @@ def parseFile(file):
 	# Load header file
 	tokens 		= []
 	if (file['header'] != ''):
-		with open(file['header'], 'rw') as f:
+		with open(file['header'], 'r') as f:
 			# Tokenize
 			for line in f.readlines():
 				tokens += nltk.word_tokenize(line)
@@ -365,7 +365,7 @@ def parseFile(file):
 	# Load source file
 	tokens 		= []
 	if (file['source'] != ''):
-		with open(file['source'], 'rw') as f:
+		with open(file['source'], 'r') as f:
 			# Tokenize
 			for line in f.readlines():
 				tokens += nltk.word_tokenize(line)
@@ -467,7 +467,8 @@ def injectCodeIntoFile(fileName, tag, replaceWith):
 		contents = f.read()
 	
 	regex = '.*{tag} start(.|\s)*?{tag} end.*'.format(tag = tag)
-	contents = re.sub(re.compile(regex), replaceWith, contents)
+	
+	contents = re.sub(re.compile(regex), lambda x: replaceWith, contents)
 	
 	with open(fileName, 'w') as f:
 		f.write( contents )
