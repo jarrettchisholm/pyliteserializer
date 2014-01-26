@@ -39,7 +39,7 @@ def matchFiles():
 	for val in sourceMatches:
 		f = {}
 		
-		name 	= val.split('/')
+		name 	= os.path.split(val)
 		name 	= name[-1].replace('.' + SOURCE_EXT, '')
 		
 		header 	= ''
@@ -49,7 +49,7 @@ def matchFiles():
 			# If more than one match is found, try to narrow it down
 			if len(headers) > 1:				
 				for h in headers:
-					t = h.split('/')
+					t = os.path.split(h)
 					t = t[-1].replace('.' + HEADERS_EXT, '')
 					if (t == name):
 						header = h
@@ -71,7 +71,7 @@ def matchFiles():
 	for val in headerMatches:
 		f = {}
 		
-		name 	= val.split('/')
+		name 	= os.path.split(val)
 		name 	= name[-1].replace('.' + HEADERS_EXT, '')
 		
 		# If we have already parsed this file pair, continue
@@ -85,7 +85,7 @@ def matchFiles():
 			# If more than one match is found, try to narrow it down
 			if len(sources) > 1:				
 				for h in sources:
-					t = h.split('/')
+					t = os.path.split(h)
 					t = t[-1].replace('.' + SOURCE_EXT, '')
 					if (t == name):
 						source = h
