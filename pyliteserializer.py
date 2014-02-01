@@ -5,7 +5,7 @@ import os
 import nltk
 import re
 
-BASE_DIR		= '../dark_horizon/'
+BASE_DIR		= '../etheral/'
 DATASTORE_DIR 	= BASE_DIR + 'src/game/data_store/'
 SOURCE 			= 'src'
 SOURCE_EXT		= 'cpp'
