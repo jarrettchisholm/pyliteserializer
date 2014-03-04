@@ -9,8 +9,8 @@ BASE_DIR		= '../dark_horizon/'
 DATASTORE_DIR 	= BASE_DIR + 'src/game/data_store/'
 SOURCE 			= 'src'
 SOURCE_EXT		= 'cpp'
-HEADERS 		= 'src'
-HEADERS_EXT		= 'h'
+HEADERS 		= 'include'
+HEADERS_EXT		= 'hpp'
 
 DATASTORE_NAME 	= 'SqliteDataStore'
 
@@ -32,7 +32,7 @@ def findFiles():
 
 
 def matchFiles():
-	""" It will match source (.cpp) files to their corresponding header (.h) files.  It will also parse and store the
+	""" It will match source (.cpp) files to their corresponding header (.hpp) files.  It will also parse and store the
 		class name (which must be the same as the file name).
 	"""
 	# Match source files
@@ -700,7 +700,7 @@ def printSqliteDataStore( classBindings ):
 #include <memory>
 #include <vector>
 
-#include "ISqliteSerializable.h"
+#include "ISqliteSerializable.hpp"
 
 '''
 	
@@ -880,7 +880,7 @@ void SqliteDataStore::save(std::vector<{namespace}{className}>& objects)
 	
 	classContents = '''#include <iostream>
 
-#include "SqliteDataStore.h"
+#include "SqliteDataStore.hpp"
 
 namespace pyliteserializer
 {
@@ -910,7 +910,7 @@ SqliteDataStore::~SqliteDataStore()
 	print 'Writing SqliteDataStore class'
 	
 	# Print class
-	with open(DATASTORE_DIR + DATASTORE_NAME + '.h', 'w') as f:
+	with open(DATASTORE_DIR + DATASTORE_NAME + '.hpp', 'w') as f:
 		f.write( headerContents )
 	with open(DATASTORE_DIR + DATASTORE_NAME + '.cpp', 'w') as f:
 		f.write( classContents )
@@ -938,4 +938,3 @@ for val in files:
 	dataStoreBindings.append( data )
 
 printSqliteDataStore( dataStoreBindings )
-	
