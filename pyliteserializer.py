@@ -6,7 +6,7 @@ import nltk
 import re
 
 BASE_DIR		= '../dark_horizon/'
-DATASTORE_DIR 	= BASE_DIR + 'src/game/data_store/'
+DATASTORE_DIR 	= BASE_DIR + 'src/data_store/'
 SOURCE 			= 'src'
 SOURCE_EXT		= 'cpp'
 HEADERS 		= 'include'
